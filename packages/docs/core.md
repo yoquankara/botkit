@@ -164,7 +164,7 @@ controller.hears(async(message) => { return (message.text.length > 100) }, 'mess
 });
 
 // compare a value in the message against a database
-// (onloy hear a message if user is already in the database)
+// (only hear a message if user is already in the database)
 controller.hears(async(message) => {
     return new Promise((resolve, reject) => {
         myDatabase.get(message.user).then(function(user) {
@@ -351,7 +351,7 @@ A simple example:
 const { BotkitConversation } = require('botkit');
 
 // define the conversation
-const onboarding = new BotkitConversation('onboarding');
+const onboarding = new BotkitConversation('onboarding', controller);
 
 onboarding.say('Hello human!');
 // collect a value with no conditions
@@ -579,6 +579,7 @@ module.exports = function(botkit) {
             // add a web route
             // controller.webserver.get('/myplugin', async(req, res) => { 
             //      Use a local handlebars view (bundled with plugin) to render a page
+            //      (hbs must be installed and initialized by plugin)
             //      res.render(controller.getLocalView(__dirname + '/views/main'));
             // });
 

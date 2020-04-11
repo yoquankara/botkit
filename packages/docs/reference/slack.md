@@ -65,8 +65,8 @@ The SlackAdapter can be used in 2 modes:
 Use with Botkit:
 ```javascript
 const adapter = new SlackAdapter({
-     clientSigningSecret: process.env.SLACK_SECRET,
-     botToken: process.env.SLACK_TOKEN
+     clientSigningSecret: process.env.CLIENT_SIGNING_SECRET,
+     botToken: process.env.BOT_TOKEN
 });
 const controller = new Botkit({
      adapter: adapter,
@@ -77,8 +77,8 @@ const controller = new Botkit({
 Use with BotBuilder:
 ```javascript
 const adapter = new SlackAdapter({
-     clientSigningSecret: process.env.SLACK_SECRET,
-     botToken: process.env.SLACK_TOKEN
+     clientSigningSecret: process.env.CLIENT_SIGNING_SECRET,
+     botToken: process.env.BOT_TOKEN
 });
 // set up restify...
 const server = restify.createServer();
@@ -93,10 +93,11 @@ server.post('/api/messages', (req, res) => {
 Use in "Slack app" multi-team mode:
 ```javascript
 const adapter = new SlackAdapter({
-    clientSigningSecret: process.env.SLACK_SECRET,
-    clientId: process.env.CLIENTID, // oauth client id
-    clientSecret: process.env.CLIENTSECRET, // oauth client secret
+    clientSigningSecret: process.env.CLIENT_SIGNING_SECRET,
+    clientId: process.env.CLIENT_ID, // oauth client id
+    clientSecret: process.env.CLIENT_SECRET, // oauth client secret
     scopes: ['bot'], // oauth scopes requested
+    oauthVersion: 'v1',
     redirectUri: process.env.REDIRECT_URI, // url to redirect post login defaults to `https://<mydomain>/install/auth`
     getTokenForTeam: async(team_id) => Promise<string>, // function that returns a token based on team id
     getBotUserByTeam: async(team_id) => Promise<string>, // function that returns a bot's user id based on team id
@@ -244,7 +245,7 @@ Standard BotBuilder adapter method to update a previous message with new content
 
 <a name="validateOauthCode"></a>
 ### validateOauthCode()
-Validates an oauth code sent by Slack during the install process.
+Validates an oauth v2 code sent by Slack during the install process.
 
 **Parameters**
 
@@ -261,9 +262,9 @@ controller.webserver.get('/install/auth', async (req, res) => {
      try {
          const results = await controller.adapter.validateOauthCode(req.query.code);
          // make sure to capture the token and bot user id by team id...
-         const team_id = results.team_id;
-         const token = results.bot.bot_access_token;
-         const bot_user = results.bot.bot_user_id;
+         const team_id = results.team.id;
+         const token = results.access_token;
+         const bot_user = results.bot_user_id;
          // store these values in a way they'll be retrievable with getBotUserByTeam and getTokenForTeam
      } catch (err) {
           console.error('OAUTH ERROR:', err);
@@ -318,9 +319,21 @@ This class includes the following methods:
 
 Reserved for use internally by Botkit's `controller.spawn()`, this class is used to create a BotWorker instance that can send messages, replies, and make other API calls.
 
-When used with the SlackAdapter's multi-tenancy mode, it is possible to spawn a bot instance by passing in the Slack workspace ID of a team that has installed the app.
+It is possible to spawn a bot instance by passing in the Slack workspace ID of a team that has installed the app.
 Use this in concert with [startPrivateConversation()](#startPrivateConversation) and [changeContext()](core.md#changecontext) to start conversations
 or send proactive alerts to users on a schedule or in response to external events.
+
+
+```javascript
+// spawn a bot for a given team.
+let bot = await controller.spawn('T0123456');
+
+// start a 1:1 with a specific user
+await bot.startPrivateConversation('U0123456');
+
+// send a message
+await bot.say('Hi user');
+```
 
 
 
@@ -927,6 +940,7 @@ This interface defines the options that can be passed into the SlackAdapter cons
 | enable_incomplete | boolean | Allow the adapter to startup without a complete configuration.<br/>This is risky as it may result in a non-functioning or insecure adapter.<br/>This should only be used when getting started.<br/>
 | getBotUserByTeam |  | A method that receives a Slack team id and returns the bot user id associated with that team. Required for multi-team apps.<br/>
 | getTokenForTeam |  | A method that receives a Slack team id and returns the bot token associated with that team. Required for multi-team apps.<br/>
+| oauthVersion | string | Which version of Slack's oauth protocol to use, v1 or v2. Defaults to v1.<br/>
 | redirectUri | string | The URL users will be redirected to after an oauth flow. In most cases, should be `https://<mydomain.com>/install/auth`<br/>
-| scopes |  | A an array of scope names that are being requested during the oauth process. Must match the scopes defined at api.slack.com<br/>
+| scopes |  | A array of scope names that are being requested during the oauth process. Must match the scopes defined at api.slack.com<br/>
 | verificationToken | string | Legacy method for validating the origin of incoming webhooks. Prefer `clientSigningSecret` instead.<br/>

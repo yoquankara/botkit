@@ -48,6 +48,14 @@ export class BotkitDialogWrapper {
     }
 
     /**
+     * Stop the dialog.
+     */
+    public async stop(): Promise<void> {
+        // set this to 1 bigger than the total length of the thread.
+        this.step.index = this.step.threadLength + 1;
+    }
+
+    /**
      * Set the value of a variable that will be available to messages in the conversation.
      * Equivalent to convo.vars.key = val;
      * Results in {{vars.key}} being replaced with the value in val.
@@ -57,7 +65,4 @@ export class BotkitDialogWrapper {
     public setVar(key, val): void {
         this.vars[key] = val;
     }
-
-    // TODO: Add other control mechanisms
-    // TODO: Add gotoDialog or startChildDialog?
 }

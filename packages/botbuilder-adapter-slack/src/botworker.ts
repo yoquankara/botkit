@@ -1,9 +1,13 @@
 /**
  * @module botbuilder-adapter-slack
  */
+/**
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ */
 
 import { Botkit, BotkitMessage, BotWorker } from 'botkit';
-import { WebClient, Dialog } from '@slack/client';
+import { WebClient, Dialog } from '@slack/web-api';
 import * as request from 'request';
 
 /**
@@ -21,9 +25,21 @@ export class SlackBotWorker extends BotWorker {
     /**
      * Reserved for use internally by Botkit's `controller.spawn()`, this class is used to create a BotWorker instance that can send messages, replies, and make other API calls.
      *
-     * When used with the SlackAdapter's multi-tenancy mode, it is possible to spawn a bot instance by passing in the Slack workspace ID of a team that has installed the app.
+     * It is possible to spawn a bot instance by passing in the Slack workspace ID of a team that has installed the app.
      * Use this in concert with [startPrivateConversation()](#startPrivateConversation) and [changeContext()](core.md#changecontext) to start conversations
      * or send proactive alerts to users on a schedule or in response to external events.
+     *
+     *
+     * ```javascript
+     * // spawn a bot for a given team.
+     * let bot = await controller.spawn('T0123456');
+     *
+     * // start a 1:1 with a specific user
+     * await bot.startPrivateConversation('U0123456');
+     *
+     * // send a message
+     * await bot.say('Hi user');
+     * ```
      *
      * @param botkit The Botkit controller object responsible for spawning this bot worker
      * @param config Normally, a DialogContext object.  Can also be the id of a team.
@@ -209,7 +225,7 @@ export class SlackBotWorker extends BotWorker {
      * @param resp an outgoing message object (or part of one or just reply text)
      */
     public async replyPublic(src: any, resp: any): Promise<any> {
-        let msg = this.ensureMessageFormat(resp);
+        const msg = this.ensureMessageFormat(resp);
         msg.channelData.response_type = 'in_channel';
 
         return this.replyInteractive(src, msg);
@@ -252,9 +268,9 @@ export class SlackBotWorker extends BotWorker {
                 msg.conversation.thread_ts = src.incoming_message.channelData.thread_ts;
             }
 
-            msg = this.controller.adapter.activityToSlack(msg);
+            msg = this.getConfig('adapter').activityToSlack(msg);
 
-            var requestOptions = {
+            const requestOptions = {
                 uri: src.incoming_message.channelData.response_url,
                 method: 'POST',
                 json: msg
@@ -295,7 +311,7 @@ export class SlackBotWorker extends BotWorker {
      * @param dialog_obj A dialog, as created using [SlackDialog](#SlackDialog) or [authored to this spec](https://api.slack.com/dialogs).
      */
     public async replyWithDialog(src, dialog_obj: Dialog): Promise<any> {
-        var msg = {
+        const msg = {
             trigger_id: src.trigger_id,
             dialog: dialog_obj
         };
@@ -320,7 +336,7 @@ export class SlackBotWorker extends BotWorker {
      * @param update An object in the form `{id: <id of message to update>, conversation: { id: <channel> }, text: <new text>, card: <array of card objects>}`
      */
     public async updateMessage(update: Partial<BotkitMessage>): Promise<any> {
-        return this.controller.adapter.updateActivity(
+        return this.getConfig('adapter').updateActivity(
             this.getConfig('context'),
             update
         );
@@ -340,7 +356,7 @@ export class SlackBotWorker extends BotWorker {
      * @param update An object in the form of `{id: <id of message to delete>, conversation: { id: <channel of message> }}`
      */
     public async deleteMessage(update: Partial<BotkitMessage>): Promise<any> {
-        return this.controller.adapter.deleteActivity(
+        return this.getConfig('adapter').deleteActivity(
             this.getConfig('context'),
             {
                 activityId: update.id,

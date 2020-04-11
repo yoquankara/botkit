@@ -7,7 +7,7 @@
  */
 
 import { Activity, ActivityTypes, BotAdapter, TurnContext, ConversationReference, ResourceResponse } from 'botbuilder';
-import { WebClient, WebAPICallResult } from '@slack/client';
+import { WebClient, WebAPICallResult } from '@slack/web-api';
 import { SlackBotWorker } from './botworker';
 import * as crypto from 'crypto';
 import * as Debug from 'debug';
@@ -27,7 +27,7 @@ export class SlackAdapter extends BotAdapter {
      * Name used by Botkit plugin loader
      * @ignore
      */
-    public name: string = 'Slack Adapter';
+    public name = 'Slack Adapter';
 
     /**
      * Object containing one or more Botkit middlewares to bind automatically.
@@ -53,8 +53,8 @@ export class SlackAdapter extends BotAdapter {
      * Use with Botkit:
      *```javascript
      * const adapter = new SlackAdapter({
-     *      clientSigningSecret: process.env.SLACK_SECRET,
-     *      botToken: process.env.SLACK_TOKEN
+     *      clientSigningSecret: process.env.CLIENT_SIGNING_SECRET,
+     *      botToken: process.env.BOT_TOKEN
      * });
      * const controller = new Botkit({
      *      adapter: adapter,
@@ -65,8 +65,8 @@ export class SlackAdapter extends BotAdapter {
      * Use with BotBuilder:
      *```javascript
      * const adapter = new SlackAdapter({
-     *      clientSigningSecret: process.env.SLACK_SECRET,
-     *      botToken: process.env.SLACK_TOKEN
+     *      clientSigningSecret: process.env.CLIENT_SIGNING_SECRET,
+     *      botToken: process.env.BOT_TOKEN
      * });
      * // set up restify...
      * const server = restify.createServer();
@@ -81,10 +81,11 @@ export class SlackAdapter extends BotAdapter {
      * Use in "Slack app" multi-team mode:
      * ```javascript
      * const adapter = new SlackAdapter({
-     *     clientSigningSecret: process.env.SLACK_SECRET,
-     *     clientId: process.env.CLIENTID, // oauth client id
-     *     clientSecret: process.env.CLIENTSECRET, // oauth client secret
+     *     clientSigningSecret: process.env.CLIENT_SIGNING_SECRET,
+     *     clientId: process.env.CLIENT_ID, // oauth client id
+     *     clientSecret: process.env.CLIENT_SECRET, // oauth client secret
      *     scopes: ['bot'], // oauth scopes requested
+     *     oauthVersion: 'v1',
      *     redirectUri: process.env.REDIRECT_URI, // url to redirect post login defaults to `https://<mydomain>/install/auth`
      *     getTokenForTeam: async(team_id) => Promise<string>, // function that returns a token based on team id
      *     getBotUserByTeam: async(team_id) => Promise<string>, // function that returns a bot's user id based on team id
@@ -105,17 +106,17 @@ export class SlackAdapter extends BotAdapter {
         */
         if (!this.options.verificationToken && !this.options.clientSigningSecret) {
             const warning = [
-                ``,
-                `****************************************************************************************`,
-                `* WARNING: Your bot is operating without recommended security mechanisms in place.     *`,
-                `* Initialize your adapter with a clientSigningSecret parameter to enable               *`,
-                `* verification that all incoming webhooks originate with Slack:                        *`,
-                `*                                                                                      *`,
-                `* var adapter = new SlackAdapter({clientSigningSecret: <my secret from slack>});       *`,
-                `*                                                                                      *`,
-                `****************************************************************************************`,
-                `>> Slack docs: https://api.slack.com/docs/verifying-requests-from-slack`,
-                ``
+                '',
+                '****************************************************************************************',
+                '* WARNING: Your bot is operating without recommended security mechanisms in place.     *',
+                '* Initialize your adapter with a clientSigningSecret parameter to enable               *',
+                '* verification that all incoming webhooks originate with Slack:                        *',
+                '*                                                                                      *',
+                '* var adapter = new SlackAdapter({clientSigningSecret: <my secret from slack>});       *',
+                '*                                                                                      *',
+                '****************************************************************************************',
+                '>> Slack docs: https://api.slack.com/docs/verifying-requests-from-slack',
+                ''
             ];
             console.warn(warning.join('\n'));
             if (!this.options.enable_incomplete) {
@@ -151,15 +152,20 @@ export class SlackAdapter extends BotAdapter {
             debug('** Slack adapter running in multi-team mode.');
         }
 
+        if (!this.options.oauthVersion) {
+            this.options.oauthVersion = 'v1';
+        }
+        this.options.oauthVersion = this.options.oauthVersion.toLowerCase();
+
         if (this.options.enable_incomplete) {
             const warning = [
-                ``,
-                `****************************************************************************************`,
-                `* WARNING: Your adapter may be running with an incomplete/unsafe configuration.        *`,
-                `* - Ensure all required configuration options are present                              *`,
-                `* - Disable the "enable_incomplete" option!                                            *`,
-                `****************************************************************************************`,
-                ``
+                '',
+                '****************************************************************************************',
+                '* WARNING: Your adapter may be running with an incomplete/unsafe configuration.        *',
+                '* - Ensure all required configuration options are present                              *',
+                '* - Disable the "enable_incomplete" option!                                            *',
+                '****************************************************************************************',
+                ''
             ];
             console.warn(warning.join('\n'));
         }
@@ -242,9 +248,13 @@ export class SlackAdapter extends BotAdapter {
      * @returns A url pointing to the first step in Slack's oauth flow.
      */
     public getInstallLink(): string {
+        let redirect = '';
         if (this.options.clientId && this.options.scopes) {
-            let redirect = 'https://slack.com/oauth/authorize?client_id=' + this.options.clientId + '&scope=' + this.options.scopes.join(',');
-
+            if (this.options.oauthVersion === 'v2') {
+                redirect = 'https://slack.com/oauth/v2/authorize?client_id=' + this.options.clientId + '&scope=' + this.options.scopes.join(',');
+            } else {
+                redirect = 'https://slack.com/oauth/authorize?client_id=' + this.options.clientId + '&scope=' + this.options.scopes.join(',');
+            }
             if (this.options.redirectUri) {
                 redirect += '&redirect_uri=' + encodeURIComponent(this.options.redirectUri);
             }
@@ -256,7 +266,7 @@ export class SlackAdapter extends BotAdapter {
     }
 
     /**
-     * Validates an oauth code sent by Slack during the install process.
+     * Validates an oauth v2 code sent by Slack during the install process.
      *
      * An example using Botkit's internal webserver to configure the /install/auth route:
      *
@@ -265,9 +275,9 @@ export class SlackAdapter extends BotAdapter {
      *      try {
      *          const results = await controller.adapter.validateOauthCode(req.query.code);
      *          // make sure to capture the token and bot user id by team id...
-     *          const team_id = results.team_id;
-     *          const token = results.bot.bot_access_token;
-     *          const bot_user = results.bot.bot_user_id;
+     *          const team_id = results.team.id;
+     *          const token = results.access_token;
+     *          const bot_user = results.bot_user_id;
      *          // store these values in a way they'll be retrievable with getBotUserByTeam and getTokenForTeam
      *      } catch (err) {
      *           console.error('OAUTH ERROR:', err);
@@ -280,12 +290,18 @@ export class SlackAdapter extends BotAdapter {
      */
     public async validateOauthCode(code: string): Promise<any> {
         const slack = new WebClient();
-        const results = await slack.oauth.access({
+        const details = {
             code: code,
             client_id: this.options.clientId,
             client_secret: this.options.clientSecret,
             redirect_uri: this.options.redirectUri
-        });
+        };
+        let results: any = {};
+        if (this.options.oauthVersion === 'v2') {
+            results = await slack.oauth.v2.access(details);
+        } else {
+            results = await slack.oauth.access(details);
+        }
         if (results.ok) {
             return results;
         } else {
@@ -299,11 +315,11 @@ export class SlackAdapter extends BotAdapter {
      * @returns a Slack message object with {text, attachments, channel, thread_ts} as well as any fields found in activity.channelData
      */
     public activityToSlack(activity: Partial<Activity>): any {
-        let channelId = activity.conversation.id;
+        const channelId = activity.conversation.id;
         // @ts-ignore ignore this non-standard field
-        let thread_ts = activity.conversation.thread_ts;
+        const thread_ts = activity.conversation.thread_ts;
 
-        let message: any = {
+        const message: any = {
             ts: activity.id,
             text: activity.text,
             attachments: activity.attachments,
@@ -339,7 +355,7 @@ export class SlackAdapter extends BotAdapter {
      */
     public async sendActivities(context: TurnContext, activities: Partial<Activity>[]): Promise<ResourceResponse[]> {
         const responses = [];
-        for (var a = 0; a < activities.length; a++) {
+        for (let a = 0; a < activities.length; a++) {
             const activity = activities[a];
             if (activity.type === ActivityTypes.Message) {
                 const message = this.activityToSlack(activity as Activity);
@@ -448,20 +464,20 @@ export class SlackAdapter extends BotAdapter {
     private async verifySignature(req, res): Promise<boolean> {
         // is this an verified request from slack?
         if (this.options.clientSigningSecret && req.rawBody) {
-            let timestamp = req.header('X-Slack-Request-Timestamp');
-            let body = req.rawBody;
+            const timestamp = req.header('X-Slack-Request-Timestamp');
+            const body = req.rawBody;
 
-            let signature = [
+            const signature = [
                 'v0',
                 timestamp, // slack request timestamp
                 body // request body
             ];
-            let basestring = signature.join(':');
+            const basestring = signature.join(':');
 
             const hash = 'v0=' + crypto.createHmac('sha256', this.options.clientSigningSecret)
                 .update(basestring)
                 .digest('hex');
-            let retrievedSignature = req.header('X-Slack-Signature');
+            const retrievedSignature = req.header('X-Slack-Signature');
 
             // Compare the hash of the computed signature with the retrieved signature with a secure hmac compare function
             const validSignature = (): boolean => {
@@ -475,6 +491,7 @@ export class SlackAdapter extends BotAdapter {
             if (!validSignature()) {
                 debug('Signature verification failed, Ignoring message');
                 res.status(401);
+                res.end();
                 return false;
             }
         }
@@ -514,7 +531,7 @@ export class SlackAdapter extends BotAdapter {
                     timestamp: new Date(),
                     channelId: 'slack',
                     conversation: {
-                        id: event.channel.id,
+                        id: event.channel ? event.channel.id : event.team.id, // use team id for channel id, required because modal block actions and submissions don't include channel.
                         thread_ts: event.thread_ts,
                         team: event.team.id
                     },
@@ -527,11 +544,33 @@ export class SlackAdapter extends BotAdapter {
 
                 // If this is a message originating from a block_action or button click, we'll mark it as a message
                 // so it gets processed in BotkitConversations
-                if ((event.type === 'block_actions' || event.type == 'interactive_message') && event.actions) {
+                if ((event.type === 'block_actions' || event.type === 'interactive_message') && event.actions) {
                     activity.type = ActivityTypes.Message;
-                    activity.text = event.actions[0].value;
+                    switch (event.actions[0].type) {
+                    case 'button':
+                        activity.text = event.actions[0].value;
+                        break;
+                    case 'static_select':
+                    case 'external_select':
+                    case 'overflow':
+                        activity.text = event.actions[0].selected_option.value;
+                        break;
+                    case 'users_select':
+                        activity.text = event.actions[0].selected_user;
+                        break;
+                    case 'conversations_select':
+                        activity.text = event.actions[0].selected_conversation;
+                        break;
+                    case 'channels_select':
+                        activity.text = event.actions[0].selected_channel;
+                        break;
+                    case 'datepicker':
+                        activity.text = event.actions[0].selected_date;
+                        break;
+                    default: activity.text = event.actions[0].type;
+                    }
                 }
-                  
+
                 // @ts-ignore this complains because of extra fields in conversation
                 activity.recipient.id = await this.getBotUserByTeam(activity as Activity);
 
@@ -582,6 +621,9 @@ export class SlackAdapter extends BotAdapter {
                         activity.conversation.id = event.team_id;
                     }
                 }
+
+                // Copy over the authed_users
+                activity.channelData.authed_users = event.authed_users;
 
                 // @ts-ignore this complains because of extra fields in conversation
                 activity.recipient.id = await this.getBotUserByTeam(activity as Activity);
@@ -700,13 +742,17 @@ export interface SlackAdapterOptions {
      */
     clientSecret?: string;
     /**
-     * A an array of scope names that are being requested during the oauth process. Must match the scopes defined at api.slack.com
+     * A array of scope names that are being requested during the oauth process. Must match the scopes defined at api.slack.com
      */
     scopes?: string[];
     /**
+     * Which version of Slack's oauth protocol to use, v1 or v2. Defaults to v1.
+     */
+    oauthVersion?: string;
+    /**
      * The URL users will be redirected to after an oauth flow. In most cases, should be `https://<mydomain.com>/install/auth`
      */
-    redirectUri: string;
+    redirectUri?: string;
 
     /**
      * A method that receives a Slack team id and returns the bot token associated with that team. Required for multi-team apps.

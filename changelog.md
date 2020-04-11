@@ -4,6 +4,94 @@
 
 [Want to contribute? Read our guide!](https://github.com/howdyai/botkit/blob/master/CONTRIBUTING.md)
 
+# 4.8.1
+
+* FIX: Fixing a bug introduced in 4.8 pertaining to spawning proactive bots for Slack. [#1937](https://github.com/howdyai/botkit/issues/1937)
+
+
+# 4.8
+
+In addition to fixing a bunch of bugs and adding some new features, this version brings Botkit up to date with Bot Framework's latest release - [Change log here](https://github.com/microsoft/botbuilder-js/releases). 
+
+There are lots of interesting things happening in the Bot Framework world including a new [GUI for dialog management called Bot Framework Composer](https://github.com/microsoft/botframework-composer), a new templating system called [Language Generation](https://github.com/microsoft/BotBuilder-Samples/tree/master/experimental/language-generation), and more. Check out the [main hub repo for more information.](https://github.com/microsoft/botframework-sdk#readme)
+
+### NEW 
+
+* NEW: At long last, the convo.ask callbacks can receive the full incoming message payload in addition to the text content.
+This allows developers to use payload values inside quick replies, button clicks and other rich operations. Many thanks to [@naikus](https://github.com/naikus) for the effort and patience it took to get this in! [PR #1801](https://github.com/howdyai/botkit/pull/1801)
+* NEW: Multi-adapter support improved. Botkit will now spawn the appropriate type of Botworker when used in a multi-adapter scenario. [See this example for a demonstration of using multiple adapters in a single bot app](./packages/testbot/multiadapter.js). [Issue #1920](https://github.com/howdyai/botkit/issues/1920)
+* NEW: Add support for Slack's v2 oauth. [More details here](./packages/botbuilder-adapter-slack/CHANGELOG.md#109). Thanks to [@sfny](https://github.com/sfny) for [PR #1928](https://github.com/howdyai/botkit/pull/1928)
+* NEW: Values in `channelData` will now be processed as Mustache templates inside BotkitConversations. [Thanks @me-cedric](https://github.com/me-cedric) for [pr #1925](https://github.com/howdyai/botkit/pull/1925)
+* NEW: New Dialog related features for determining if a bot is already in a conversation, including [bot.hasActiveDialog()](packages/docs/reference/core.md#hasActiveDialog),
+[bot.getActiveDialog()](packages/docs/reference/core.md#getActiveDialog), and
+[bot.isDialogActive()](packages/docs/reference/core.md#isDialogActive) 
+
+### FIXED
+
+* FIX: Facebook Adapter will not attempt to set up web routes if webserver is not configured. [#1916](https://github.com/howdyai/botkit/issues/1916)
+* FIX: Exclude `activity.conversation.properties` field when generating state storage key. [#1849](https://github.com/howdyai/botkit/issues/1849)
+* FIX: Allow startConversationWithUser to work with Bot Framework Emulator. [#1834](https://github.com/howdyai/botkit/issues/1834)
+* FIX: Using `beginDialog` inside an `ask()` caused weird behaviors.  Fixes for [#1878](https://github.com/howdyai/botkit/issues/1878) and [#1932](https://github.com/howdyai/botkit/issues/1932)
+* FIX: Webex - remove empty `files` key [#1906](https://github.com/howdyai/botkit/pull/1906)
+* FIX: Slack - authed_users added to message [#1911](https://github.com/howdyai/botkit/issues/1911)
+* Update: all dependencies to latest, including bot framework 4.7->4.8 and mustache 3.0 -> 4.0
+
+# 4.6.1
+
+Version 4.6.1 includes some security and bugfix updates along with bumping many dependencies to the latest versions.
+We recommend updating both Botkit core and your platform adapter to the latest version.
+
+* Update Bot Framework dependencies to 4.7.1.  Resolved [#1882](https://github.com/howdyai/botkit/issues/1882) and [#1894](https://github.com/howdyai/botkit/issues/1894).
+* Remove `hbs` depencency from Botkit. Not used! Thanks @naktibaldi [#1855](https://github.com/howdyai/botkit/pull/1855)
+* Botkit feature modules can now be written in ES6 syntax. Thanks @cooperka!! [#1854](https://github.com/howdyai/botkit/pull/1854)
+* Allow `attachmentLayout` field in Botkit Conversations -- thanks @innorag [#1865](https://github.com/howdyai/botkit/pull/1865)
+* Update dependencies and some minor eslint syntax fixes across all the adapters and sub-packages.
+* Fixes in [botbuilder-adapter-slack](packages/botbuilder-adapter-slack/CHANGELOG.md#108)
+* Fixes in [botbuilder-adapter-web](packages/botbuilder-adapter-web/CHANGELOG.md#106)
+
+
+# 4.6
+
+Version 4.6 includes security and bugfix updates to many dependencies, as well as fixes to some issues in Botkit core.
+We recommend updating both Botkit core and your platform adapter to the latest version.
+
+**New Features**
+* Add a new `BotkitTestClient` class that makes it possible to write unit tests for dialogs. See [EXAMPLE UNIT TESTS HERE](https://github.com/howdyai/botkit/blob/master/packages/botkit/tests/Dialog.tests.js) -- [HUGE HUGE thanks to @qwertyuu for leading the effort on this!](https://github.com/howdyai/botkit/pull/1815)
+* Support .ts (or parameterized) file extensions for loadModules [Thanks to @mutmatt for the PR](https://github.com/howdyai/botkit/pull/1777)
+* The `text` field in a BotkitConversations can now be a function, which can be used to generated internationalized strings. [Thanks to @cooperka for the PR](https://github.com/howdyai/botkit/pull/1747)
+* Add `convo.stop()` to allow conversation to be ended inside a handler.
+* Update yeoman generator to make all environment variables UPPERCASE
+
+**Fixes**
+* Fix usePlugin parameter type declaration [thanks to @etiennellipse](https://github.com/howdyai/botkit/pull/1836)
+* Fix ask/addQuestion type signatures [thanks to @etiennellipse](https://github.com/howdyai/botkit/pull/1818)
+* Fix to how messages are constructed inside BotkitConversations. [thanks to @adantoscano](https://github.com/howdyai/botkit/pull/1746)
+* Fail with better error when thread not found [Thanks to @cooperka](https://github.com/howdyai/botkit/pull/1758)
+* correct mustache rendering from causing mutation of initial dialog script [Thanks to @InnoraG](https://github.com/howdyai/botkit/pull/1761)
+* Fix: allow BotkitPlugins to have additional fields [Thanks to @roeintense](https://github.com/howdyai/botkit/issues/1804)
+* Fix: resolve issues where calling cancelAllDialogs() would crash [thanks to @etiennellipse](https://github.com/howdyai/botkit/issues/1808)
+* Fix: resolve issue where calling cancelAllDialogs() could cause repeat [thanks to @chahat-arora](https://github.com/howdyai/botkit/issues/1830)
+* Fix: resolve issue where calling convo.repeat() would cause errors [thanks to akshaykonjier](https://github.com/howdyai/botkit/issues/1673) and [also to @etiennellipse](https://github.com/howdyai/botkit/issues/1811)
+
+This update includes the following packages:
+
+* Botkit v4.6.0
+* generator-botkit v4.6.0
+* [botbuilder-adapter-web v1.0.5](packages/botbuilder-adapter-web/CHANGELOG.md#105)
+* [botbuilder-adapter-slack v1.0.6](packages/botbuilder-adapter-slack/CHANGELOG.md#106)
+* [botbuilder-adapter-webex v1.0.4](packages/botbuilder-adapter-webex/CHANGELOG.md#104)
+* [botbuilder-adapter-facebook v1.0.6](packages/botbuilder-adapter-facebook/CHANGELOG.md#106)
+* [botbuilder-adapter-hangouts v1.0.4](packages/botbuilder-adapter-hangouts/CHANGELOG.md#103)
+* [botbuilder-adapter-twilio-sms v1.0.4](packages/botbuilder-adapter-twilio-sms/CHANGELOG.md#104)
+* [botkit-plugin-cms v1.0.3](packages/botkit-plugin-cms/CHANGELOG.md#103)
+
+# 0.7.5
+
+A maintenance release to the legacy branch was released as 0.7.5.
+
+* Update out of date dependencies to address security issues
+* Add support for Slack's new modals
+
 # 4.5
 
 We're skipping a few version numbers here to keep in sync with the rest of [Microsoft Bot Framework](https://github.com/microsoft/botframework).

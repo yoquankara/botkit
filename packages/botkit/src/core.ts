@@ -5,7 +5,7 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License.
  */
-import { Activity, MemoryStorage, Storage, ConversationReference, TurnContext } from 'botbuilder';
+import { Activity, MemoryStorage, Storage, ConversationReference, TurnContext, BotAdapter } from 'botbuilder';
 import { Dialog, DialogContext, DialogSet, DialogTurnStatus, WaterfallDialog } from 'botbuilder-dialogs';
 import { BotkitBotFrameworkAdapter } from './adapter';
 import { BotWorker } from './botworker';
@@ -14,12 +14,11 @@ import * as path from 'path';
 import * as http from 'http';
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
-import * as hbs from 'hbs';
-
 import * as Ware from 'ware';
 import * as fs from 'fs';
+import * as Debug from 'debug';
 
-const debug = require('debug')('botkit');
+const debug = Debug('botkit');
 
 /**
  * Defines the options used when instantiating Botkit to create the main app controller with `new Botkit(options)`
@@ -57,7 +56,7 @@ export interface BotkitConfiguration {
      * An array of middlewares that will be automatically bound to the webserver.
      * Should be in the form (req, res, next) => {}
      */
-    webserver_middlewares: any[];
+    webserver_middlewares?: any[];
 
     /**
      * A Storage interface compatible with [this specification](https://docs.microsoft.com/en-us/javascript/api/botbuilder-core/storage?view=botbuilder-ts-latest)
@@ -166,6 +165,7 @@ export interface BotkitPlugin {
         [key: string]: any[];
     };
     init?: (botkit: Botkit) => void;
+    [key: string]: any; // allow arbitrary additional fields to be added.
 }
 
 /**
@@ -248,7 +248,7 @@ export class Botkit {
         ingest: new Ware(),
         send: new Ware(),
         receive: new Ware(),
-        interpret: new Ware(),
+        interpret: new Ware()
     }
 
     /**
@@ -381,15 +381,6 @@ export class Botkit {
 
                 this.http = http.createServer(this.webserver);
 
-                hbs.localsAsTemplateData(this.webserver);
-
-                // From https://stackoverflow.com/questions/10232574/handlebars-js-parse-object-instead-of-object-object
-                hbs.registerHelper('json', function(context) {
-                    return JSON.stringify(context);
-                });
-
-                this.webserver.set('view engine', 'hbs');
-
                 this.http.listen(process.env.port || process.env.PORT || 3000, () => {
                     if (this._config.disable_console !== true) {
                         console.log(`Webhook endpoint online:  http://localhost:${ process.env.PORT || 3000 }${ this._config.webhook_uri }`);
@@ -407,7 +398,7 @@ export class Botkit {
             this.adapter = new BotkitBotFrameworkAdapter(adapterConfig);
             if (this.webserver) {
                 if (this._config.disable_console !== true) {
-                    console.log(`Open this bot in Bot Framework Emulator: bfemulator://livechat.open?botUrl=` + encodeURIComponent(`http://localhost:${ process.env.PORT || 3000 }${ this._config.webhook_uri }`));
+                    console.log('Open this bot in Bot Framework Emulator: bfemulator://livechat.open?botUrl=' + encodeURIComponent(`http://localhost:${ process.env.PORT || 3000 }${ this._config.webhook_uri }`));
                 }
             }
         } else {
@@ -482,7 +473,7 @@ export class Botkit {
      * Load a plugin module and bind all included middlewares to their respective endpoints.
      * @param plugin_or_function A plugin module in the form of function(botkit) {...} that returns {name, middlewares, init} or an object in the same form.
      */
-    public usePlugin(plugin_or_function: (botkit: Botkit) => BotkitPlugin | BotkitPlugin): void {
+    public usePlugin(plugin_or_function: ((botkit: Botkit) => BotkitPlugin) | BotkitPlugin): void {
         let plugin: BotkitPlugin;
         if (typeof (plugin_or_function) === 'function') {
             plugin = plugin_or_function(this);
@@ -514,8 +505,8 @@ export class Botkit {
         this.plugin_list.push(name);
 
         if (endpoints.middlewares) {
-            for (var mw in endpoints.middlewares) {
-                for (var e = 0; e < endpoints.middlewares[mw].length; e++) {
+            for (const mw in endpoints.middlewares) {
+                for (let e = 0; e < endpoints.middlewares[mw].length; e++) {
                     this.middleware[mw].use(endpoints.middlewares[mw][e]);
                 }
             }
@@ -632,7 +623,7 @@ export class Botkit {
 
         this._deps[name] = true;
 
-        for (let key in this._deps) {
+        for (const key in this._deps) {
             if (this._deps[key] === false) {
                 return false;
             }
@@ -649,7 +640,7 @@ export class Botkit {
     private signalBootComplete(): void {
         this.booted = true;
         for (let h = 0; h < this._bootCompleteHandlers.length; h++) {
-            let handler = this._bootCompleteHandlers[h];
+            const handler = this._bootCompleteHandlers[h];
             handler.call(this);
         }
     }
@@ -707,14 +698,9 @@ export class Botkit {
     public async handleTurn(turnContext: TurnContext): Promise<any> {
         debug('INCOMING ACTIVITY:', turnContext.activity);
 
-        // Create a dialog context
-        const dialogContext = await this.dialogSet.createContext(turnContext);
-
-        // Spawn a bot worker with the dialogContext
-        const bot = await this.spawn(dialogContext);
-
         // Turn this turnContext into a Botkit message.
         const message: BotkitMessage = {
+            // ...turnContext.activity,
             ...turnContext.activity.channelData, // start with all the fields that were in the original incoming payload. NOTE: this is a shallow copy, is that a problem?
 
             // if Botkit has further classified this message, use that sub-type rather than the Activity type
@@ -738,6 +724,15 @@ export class Botkit {
             incoming_message: turnContext.activity
         };
 
+        // Stash the Botkit message in
+        turnContext.turnState.set('botkitMessage', message);
+
+        // Create a dialog context
+        const dialogContext = await this.dialogSet.createContext(turnContext);
+
+        // Spawn a bot worker with the dialogContext
+        const bot = await this.spawn(dialogContext);
+
         return new Promise((resolve, reject) => {
             this.middleware.ingest.run(bot, message, async (err, bot, message) => {
                 if (err) {
@@ -747,7 +742,6 @@ export class Botkit {
                         if (err) {
                             reject(err);
                         } else {
-
                             const interrupt_results = await this.listenForInterrupts(bot, message);
 
                             if (interrupt_results === false) {
@@ -784,7 +778,7 @@ export class Botkit {
      * @param message {BotkitMessage} an incoming message
      */
     private async processTriggersAndEvents(bot: BotWorker, message: BotkitMessage): Promise<any> {
-        return new Promise(async (resolve, reject) => {
+        return new Promise((resolve, reject) => {
             this.middleware.interpret.run(bot, message, async (err, bot, message) => {
                 if (err) {
                     return reject(err);
@@ -811,7 +805,7 @@ export class Botkit {
     private async listenForTriggers(bot: BotWorker, message: BotkitMessage): Promise<any> {
         if (this._triggers[message.type]) {
             const triggers = this._triggers[message.type];
-            for (var t = 0; t < triggers.length; t++) {
+            for (let t = 0; t < triggers.length; t++) {
                 const test_results = await this.testTrigger(triggers[t], message);
                 if (test_results) {
                     debug('Heard pattern: ', triggers[t].pattern);
@@ -835,7 +829,7 @@ export class Botkit {
     private async listenForInterrupts(bot: BotWorker, message: BotkitMessage): Promise<any> {
         if (this._interrupts[message.type]) {
             const triggers = this._interrupts[message.type];
-            for (var t = 0; t < triggers.length; t++) {
+            for (let t = 0; t < triggers.length; t++) {
                 const test_results = await this.testTrigger(triggers[t], message);
                 if (test_results) {
                     debug('Heard interruption: ', triggers[t].pattern);
@@ -913,8 +907,8 @@ export class Botkit {
 
         debug('Registering hears for ', events);
 
-        for (var p = 0; p < patterns.length; p++) {
-            for (var e = 0; e < events.length; e++) {
+        for (let p = 0; p < patterns.length; p++) {
+            for (let e = 0; e < events.length; e++) {
                 const event = events[e];
                 const pattern = patterns[p];
 
@@ -967,10 +961,10 @@ export class Botkit {
         }
         debug('Registering hears for ', events);
 
-        for (var p = 0; p < patterns.length; p++) {
-            for (var e = 0; e < events.length; e++) {
-                var event = events[e];
-                var pattern = patterns[p];
+        for (let p = 0; p < patterns.length; p++) {
+            for (let e = 0; e < events.length; e++) {
+                const event = events[e];
+                const pattern = patterns[p];
 
                 if (!this._interrupts[event]) {
                     this._interrupts[event] = [];
@@ -1044,7 +1038,7 @@ export class Botkit {
     public async trigger(event: string, bot?: BotWorker, message?: BotkitMessage): Promise<any> {
         debug('Trigger event: ', event);
         if (this._events[event] && this._events[event].length) {
-            for (var h = 0; h < this._events[event].length; h++) {
+            for (let h = 0; h < this._events[event].length; h++) {
                 try {
                     const handler_results = await this._events[event][h].call(bot, bot, message);
                     if (handler_results === false) {
@@ -1063,8 +1057,9 @@ export class Botkit {
      * The spawned `bot` contains all information required to process outbound messages and handle dialog state, and may also contain extensions
      * for handling platform-specific events or activities.
      * @param config {any} Preferably receives a DialogContext, though can also receive a TurnContext. If excluded, must call `bot.changeContext(reference)` before calling any other method.
+     * @param adapter {BotAdapter} An optional reference to a specific adapter from which the bot will be spawned. If not specified, will use the adapter from which the configuration object originates. Required for spawning proactive bots in a multi-adapter scenario.
      */
-    public async spawn(config?: any): Promise<BotWorker> {
+    public async spawn(config?: any, custom_adapter?: BotAdapter): Promise<BotWorker> {
         if (config instanceof TurnContext) {
             config = {
                 dialogContext: await this.dialogSet.createContext(config as TurnContext),
@@ -1082,12 +1077,17 @@ export class Botkit {
         }
 
         let worker: BotWorker = null;
-        if (this.adapter.botkit_worker) {
-            let CustomBotWorker = this.adapter.botkit_worker;
+        const adapter = custom_adapter || (config.context && config.context.adapter) ? config.context.adapter : this.adapter;
+
+        if (adapter.botkit_worker) {
+            const CustomBotWorker = adapter.botkit_worker;
             worker = new CustomBotWorker(this, config);
         } else {
             worker = new BotWorker(this, config);
         }
+
+        // make sure the adapter is available in a standard location.
+        worker.getConfig().adapter = adapter;
 
         return new Promise((resolve, reject) => {
             this.middleware.spawn.run(worker, (err, worker) => {
@@ -1107,7 +1107,16 @@ export class Botkit {
      */
     public loadModule(p: string): void {
         debug('Load Module:', p);
-        require(p)(this);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const module = require(p);
+        // Handle both CJS `module.exports` and ESM `export default` syntax.
+        if (typeof module === 'function') {
+            module(this);
+        } else if (module && typeof module.default === 'function') {
+            module.default(this);
+        } else {
+            throw new Error(`Failed to load '${ p }', did you export a function?`);
+        }
     }
 
     /**
@@ -1123,10 +1132,13 @@ export class Botkit {
      * ```
      *
      * @param p {string} path to a folder of module files
+     * @param exts {string[]} the extensions that you would like to load (default: ['.js'])
      */
-    public loadModules(p: string): void {
-        // load all the .js files from this path
-        fs.readdirSync(p).filter((f) => { return (path.extname(f) === '.js'); }).forEach((file) => {
+    public loadModules(p: string, exts: string[] = ['.js']): void {
+        // load all the .js|.ts files from this path
+        fs.readdirSync(p).filter((f) => {
+            return exts.includes(path.extname(f));
+        }).forEach((file) => {
             this.loadModule(path.join(p, file));
         });
     }
@@ -1157,14 +1169,13 @@ export class Botkit {
         // add a wrapper dialog that will be called by bot.beginDialog
         // and is responsible for capturing the parent results
         this.dialogSet.add(new WaterfallDialog(dialog.id + ':botkit-wrapper', [
-            async (step) => {
+            async (step): Promise<any> => {
                 return step.beginDialog(dialog.id, step.options);
             },
-            async (step) => {
-                let bot = await this.spawn(step.context);
+            async (step): Promise<any> => {
+                const bot = await this.spawn(step.context);
 
                 await this.trigger(dialog.id + ':after', bot, step.result);
-
                 return step.endDialog(step.result);
             }
         ]));

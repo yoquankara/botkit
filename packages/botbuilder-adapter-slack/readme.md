@@ -70,6 +70,16 @@ server.post('/api/messages', (req, res) => {
 });
 ```
 
+### Important URLs
+
+Your bot application will present several important URLs. You'll need to configure your Slack application profile with these urls.
+
+The messaging endpoint, which receives all events from Slack is: `https://YOURBOT/api/messages`
+
+The default "install" URL that triggers the oauth flow for multi-team installation is `https://YOURBOT/install`
+
+The oauth callback URL (or "redirect uri") that should be added to your Slack application profile is `https://YOURBOT/install/auth`
+
 ### Multi-team Support
 
 In the examples above, the `SlackAdapter` constructor received a single `botToken` parameters. This binds the adapter and all API calls it makes to a single Slack workspace.
@@ -88,8 +98,9 @@ const adapter = new SlackAdapter({
     clientSigningSecret: process.env.SLACK_SECRET,
     clientId: process.env.CLIENTID, // oauth client id
     clientSecret: process.env.CLIENTSECRET, // oauth client secret
-    scopes: ['bot'], // oauth scopes requested
+    scopes: ['bot'], // oauth scopes requested, 'bot' deprecated by Slack in favor of granular permissions
     redirectUri: process.env.REDIRECT_URI, // url to redirect post-login
+    oauthVersion: 'v1', // or use v2
     getTokenForTeam: async(team_id) => {
         // load the token for this team
         // as captured during oauth 
@@ -103,7 +114,7 @@ const adapter = new SlackAdapter({
 // Create a route for the install link.
 // This will redirect the user to Slack's permission request page.
 controller.webserver.get('/install', (req, res) => {
-    res.redirect(controller.getInstallLink());
+    res.redirect(adapter.getInstallLink());
 });
 
 // Create a route to capture the results of the oauth flow.
@@ -113,9 +124,9 @@ controller.webserver.get('/install/auth', (req, res) => {
         const results = await controller.adapter.validateOauthCode(req.query.code);
 
         // Store token by team in bot state.
-        let team = results.team_id;
-        let token = results.bot.bot_access_token;
-        let userId = results.bot.bot_user_id;
+        let team = results.team_id; // results.team.id in oauth v2
+        let token = results.bot.bot_access_token; // results.access_token in oauth v2
+        let userId = results.bot.bot_user_id; // results.bot_user_id in oauth v2
 
         // Securely store the token and usedId so that they can be retrieved later by the team id.
         // ...
@@ -131,6 +142,23 @@ controller.webserver.get('/install/auth', (req, res) => {
     }
 });
 ```
+
+### Using Slack's v2 OAuth
+
+To use Slack's [newer "granular scopes"](https://api.slack.com/authentication/oauth-v2), specify `oauthVersion: 'v2'` in your adapter configuration.
+This will cause the adapter to use the v2 oauth URL and credential validation function.
+However, note that the payload returned `validateOauthCode` differs between versions.
+
+In v1, your bot's token will be located at `results.bot.bot_access_token`, whereas in v2, it will be `results.access_token`.
+
+In v1, your bot's user id will be at `results.bot.bot_user_id`, whereas in v2 it will be `results.bot_user_id`.
+
+From Slack's official docs:
+
+* [V1 response payload](https://api.slack.com/methods/oauth.access#response)
+* [V2 response payload](https://api.slack.com/methods/oauth.v2.access#response)
+
+Take care to update your auth handler function when you migrate to granular scopes.
 
 ## Class Reference
 
@@ -226,13 +254,14 @@ await bot.reply(message, content);
 Attachments are still supported by Slack, but the preferred way is to use Block Kit. [Read the official Slack documentation here](https://api.slack.com/reference/messaging/attachments)
 
 
-### [Spawn a worker for a specific team](../docs/reference/slack.md#create-a-new-slackbotworker)
+### [Spawn a worker](../docs/reference/slack.md#create-a-new-slackbotworker)
 
-For a bot that works with multiple teams, it is possible to spawn bot workers bound to a specific team by passing the team ID as the primary parameter to `controller.spawn()`:
+It is possible to spawn bot workers bound to a specific team by passing the team ID as the primary parameter to `controller.spawn()`:
 
 ```javascript
 let bot = await controller.spawn(SLACK_TEAM_ID);
 ```
+
 ### Start or resume conversations with people
 
 Use these method to initiate a conversation with a user, or in a specific channel or thread. After calling these methods, any further actions carried out by the bot worker will happen in that context.
@@ -262,7 +291,7 @@ controller.on('slash_command', async(bot, message) => {
     // the /command <parameters> part
     let parameter = message.text;
 
-    await bot.replyPublic('My response to your command is: ...');
+    await bot.replyPublic(message, 'My response to your command is: ...');
 
 });
 ```
