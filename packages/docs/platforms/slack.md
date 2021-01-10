@@ -98,8 +98,8 @@ The application must implement its own mechanism for securely storing and retrie
 ```javascript
 const adapter = new SlackAdapter({
     clientSigningSecret: process.env.SLACK_SECRET,
-    clientId: process.env.CLIENTID, // oauth client id
-    clientSecret: process.env.CLIENTSECRET, // oauth client secret
+    clientId: process.env.CLIENT_ID, // oauth client id
+    clientSecret: process.env.CLIENT_SECRET, // oauth client secret
     scopes: ['bot'], // oauth scopes requested, 'bot' deprecated by Slack in favor of granular permissions
     redirectUri: process.env.REDIRECT_URI, // url to redirect post-login
     oauthVersion: 'v1', // or use v2
@@ -240,6 +240,11 @@ Botkit will automatically construct your outgoing messages according to Slack's 
 **Use Block Kit Blocks**
 
 The preferred way of composing interactive messages is using Slack's Block Kit.  [Read the official Slack documentation here](https://api.slack.com/messaging/composing/layouts). Slack provides a UI to help create your interactive messages. Check out [Block Kit Builder](https://api.slack.com/tools/block-kit-builder).
+
+Additionally, there are open-source libraries available that assist with building out UIs for Slack:
+
+* [**Block Builder**](https://github.com/raycharius/slack-block-builder) – Zero-dependency library, with a SwiftUI-like builder syntax.
+* [**JSX-Slack**](https://github.com/speee/jsx-slack) – JSX that transpiles to Slack API-compatible JSON.
 
 Interactive messages using blocks can be sent via any of Botkit's built in functions by passing in the appropriate "blocks" as part of the message.  Here is an example:
 

@@ -172,7 +172,7 @@ export class SlackAdapter extends BotAdapter {
 
         this.middlewares = {
             spawn: [
-                async (bot, next) => {
+                async (bot, next): Promise<void> => {
                     // make the Slack API available to all bot instances.
                     bot.api = await this.getAPI(bot.getConfig('activity')).catch((err) => {
                         debug('An error occurred while trying to get API creds for team', err);
@@ -342,6 +342,11 @@ export class SlackAdapter extends BotAdapter {
 
         if (message.icon_url || message.icon_emoji || message.username) {
             message.as_user = false;
+        }
+
+        // as_user flag is deprecated on v2
+        if (message.as_user === false && this.options.oauthVersion === 'v2') {
+            delete message.as_user;
         }
 
         return message;

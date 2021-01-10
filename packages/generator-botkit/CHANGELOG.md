@@ -1,7 +1,10 @@
+# 4.10.0
+
+* Update to Botkit 4.10
+
 # 4.6.3
 
 Fix issue introduced in 4.6.2 that removed required .env file templates
-
 
 # 4.6.1
 
